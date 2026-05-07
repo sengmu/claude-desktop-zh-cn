@@ -4,10 +4,6 @@
 
 本汉化方案仅支持使用 API 的方式。请先参照 https://linux.do/t/topic/2032192 配置
 
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=javaht/claude-desktop-zh-cn&type=Date)](https://www.star-history.com/#javaht/claude-desktop-zh-cn&Date)
-
 ## 功能特点
 
 - 一键安装 Claude Desktop 中文界面资源，支持 macOS 和 Windows。
@@ -143,6 +139,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install_windows.ps
 ```
 
 会优先恢复最近一次备份，再删除中文资源并把语言配置改回 `en-US`。
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=javaht/claude-desktop-zh-cn&type=Date)](https://www.star-history.com/#javaht/claude-desktop-zh-cn&Date)
 
 ## 免责声明
 
