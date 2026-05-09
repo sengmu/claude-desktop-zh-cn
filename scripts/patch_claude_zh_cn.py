@@ -33,13 +33,8 @@ from typing import Any
 
 
 APP_DEFAULT = Path("/Applications/Claude.app")
-LANG_CODE = "zh-CN"
 ROOT = Path(__file__).resolve().parent.parent
 RESOURCES = ROOT / "resources"
-
-FRONTEND_TRANSLATION = RESOURCES / "frontend-zh-CN.json"
-DESKTOP_TRANSLATION = RESOURCES / "desktop-zh-CN.json"
-LOCALIZABLE_STRINGS = RESOURCES / "Localizable.strings"
 
 APP_ASAR_REL = Path("Contents/Resources/app.asar")
 FRONTEND_I18N_REL = Path("Contents/Resources/ion-dist/i18n")
@@ -51,6 +46,22 @@ ASAR_INTEGRITY_BLOCK_SIZE = 4 * 1024 * 1024
 LANG_LIST_RE = re.compile(
     r'\["en-US","de-DE","fr-FR","ko-KR","ja-JP","es-419","es-ES","it-IT","hi-IN","pt-BR","id-ID"(.*?)\]'
 )
+
+
+def get_language_config(lang_code: str) -> dict[str, Any]:
+    """Return file paths and settings for the given language code."""
+    return {
+        "lang_code": lang_code,
+        "frontend_translation": RESOURCES / f"frontend-{lang_code}.json",
+        "desktop_translation": RESOURCES / f"desktop-{lang_code}.json",
+        "localizable_strings": RESOURCES / f"Localizable-{lang_code}.strings" if (RESOURCES / f"Localizable-{lang_code}.strings").exists() else RESOURCES / "Localizable.strings",
+        "statsig_translation": RESOURCES / f"statsig-{lang_code}.json",
+        "label": {
+            "zh-CN": "简体中文",
+            "zh-TW": "繁体中文（台湾）",
+            "zh-HK": "繁体中文（香港）",
+        }.get(lang_code, lang_code),
+    }
 
 
 def run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -122,14 +133,17 @@ def patch_language_whitelist(app: Path) -> Path:
     if not candidates:
         raise SystemExit(f"Cannot find frontend index bundle in {assets_dir}")
 
+    all_chinese = ['"zh-CN"', '"zh-TW"', '"zh-HK"']
+    replacement = '["en-US","de-DE","fr-FR","ko-KR","ja-JP","es-419","es-ES","it-IT","hi-IN","pt-BR","id-ID","zh-CN","zh-TW","zh-HK"]'
+
     for path in candidates:
         text = path.read_text(encoding="utf-8")
-        if '"zh-CN"' in text:
-            print(f"Language whitelist already contains zh-CN: {path.name}")
+        if all(lang in text for lang in all_chinese):
+            print(f"Language whitelist already contains all Chinese variants: {path.name}")
             return path
         if LANG_LIST_RE.search(text):
             patched = LANG_LIST_RE.sub(
-                '["en-US","de-DE","fr-FR","ko-KR","ja-JP","es-419","es-ES","it-IT","hi-IN","pt-BR","id-ID","zh-CN"]',
+                replacement,
                 text,
                 count=1,
             )
@@ -493,14 +507,15 @@ def patch_custom3p_model_validation(app: Path) -> None:
     print("Patched custom 3P model-name validation in app.asar")
 
 
-def merge_frontend_locale(app: Path) -> tuple[int, int, int]:
+def merge_frontend_locale(app: Path, lang_code: str) -> tuple[int, int, int]:
+    config = get_language_config(lang_code)
     source = app / FRONTEND_I18N_REL / "en-US.json"
-    target = app / FRONTEND_I18N_REL / "zh-CN.json"
+    target = app / FRONTEND_I18N_REL / f"{lang_code}.json"
     require_file(source)
-    require_file(FRONTEND_TRANSLATION)
+    require_file(config["frontend_translation"])
 
     en = load_json(source)
-    zh_pack = load_json(FRONTEND_TRANSLATION)
+    zh_pack = load_json(config["frontend_translation"])
     if not isinstance(en, dict) or not isinstance(zh_pack, dict):
         raise SystemExit("Unsupported frontend i18n JSON shape.")
 
@@ -518,34 +533,36 @@ def merge_frontend_locale(app: Path) -> tuple[int, int, int]:
 
     save_json(target, merged)
     extra = len(set(zh_pack) - set(en))
-    print(f"Installed frontend zh-CN: {translated} translated, {fallback} fallback, {extra} extra old keys ignored")
+    print(f"Installed frontend {lang_code}: {translated} translated, {fallback} fallback, {extra} extra old keys ignored")
     return translated, fallback, extra
 
 
-def install_desktop_locale(app: Path) -> None:
+def install_desktop_locale(app: Path, lang_code: str) -> None:
+    config = get_language_config(lang_code)
     resources_dir = app / DESKTOP_RESOURCES_REL
-    require_file(DESKTOP_TRANSLATION)
-    require_file(LOCALIZABLE_STRINGS)
+    require_file(config["desktop_translation"])
+    require_file(config["localizable_strings"])
 
-    shutil.copy2(DESKTOP_TRANSLATION, resources_dir / "zh-CN.json")
-    for folder in ["zh-CN.lproj", "zh_CN.lproj"]:
+    shutil.copy2(config["desktop_translation"], resources_dir / f"{lang_code}.json")
+    for folder in [f"{lang_code}.lproj", f"{lang_code.replace('-', '_')}.lproj"]:
         out_dir = resources_dir / folder
         out_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(LOCALIZABLE_STRINGS, out_dir / "Localizable.strings")
-    print("Installed desktop shell zh-CN resources")
+        shutil.copy2(config["localizable_strings"], out_dir / "Localizable.strings")
+    print(f"Installed desktop shell {lang_code} resources")
 
 
-def install_statsig_locale(app: Path) -> None:
+def install_statsig_locale(app: Path, lang_code: str) -> None:
+    config = get_language_config(lang_code)
     statsig_dir = app / FRONTEND_I18N_REL / "statsig"
     if not statsig_dir.exists():
         return
-    target = statsig_dir / "zh-CN.json"
-    bundled = RESOURCES / "statsig-zh-CN.json"
+    target = statsig_dir / f"{lang_code}.json"
+    bundled = config["statsig_translation"]
     if bundled.exists():
         shutil.copy2(bundled, target)
     elif (statsig_dir / "en-US.json").exists():
         shutil.copy2(statsig_dir / "en-US.json", target)
-    print("Installed statsig zh-CN resource")
+    print(f"Installed statsig {lang_code} resource")
 
 
 def sign_path(path: Path, entitlements_dir: Path) -> None:
@@ -619,7 +636,7 @@ def clear_quarantine(app: Path) -> None:
         print("Cleared Gatekeeper quarantine attribute")
 
 
-def set_user_locale(user_home: Path) -> None:
+def set_user_locale(user_home: Path, lang_code: str) -> None:
     config = user_home / "Library/Application Support/Claude/config.json"
     config.parent.mkdir(parents=True, exist_ok=True)
     data: dict[str, Any] = {}
@@ -630,7 +647,7 @@ def set_user_locale(user_home: Path) -> None:
             backup = config.with_suffix(".json.bak-invalid")
             shutil.copy2(config, backup)
             print(f"Existing config was not valid JSON; backed up to {backup}")
-    data["locale"] = LANG_CODE
+    data["locale"] = lang_code
     save_json(config, data)
 
     sudo_uid = os.environ.get("SUDO_UID")
@@ -655,12 +672,12 @@ def backup_and_replace(original: Path, patched: Path, dry_run: bool) -> Path:
     return backup
 
 
-def verify(app: Path) -> None:
-    frontend = app / FRONTEND_I18N_REL / "zh-CN.json"
+def verify(app: Path, lang_code: str) -> None:
+    frontend = app / FRONTEND_I18N_REL / f"{lang_code}.json"
     data = load_json(frontend)
     values = [v for v in data.values() if isinstance(v, str)]
     chinese = sum(1 for v in values if re.search(r"[\u4e00-\u9fff]", v))
-    print(f"Verified frontend zh-CN JSON: {chinese}/{len(values)} strings contain Chinese")
+    print(f"Verified frontend {lang_code} JSON: {chinese}/{len(values)} strings contain Chinese")
 
     verify_result = run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(app)], check=False)
     if verify_result.returncode == 0:
@@ -682,16 +699,21 @@ def verify(app: Path) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Patch Claude Desktop with zh-CN language resources.")
+    parser = argparse.ArgumentParser(description="Patch Claude Desktop with Chinese language resources.")
     parser.add_argument("--app", type=Path, default=APP_DEFAULT, help="Path to Claude.app")
     parser.add_argument("--user-home", type=Path, default=Path.home(), help="Home directory whose Claude config should be updated")
+    parser.add_argument("--lang", choices=["zh-CN", "zh-TW", "zh-HK"], default="zh-CN", help="Language code to install (default: zh-CN)")
     parser.add_argument("--dry-run", action="store_true", help="Prepare and verify a patched temp app, but do not replace /Applications/Claude.app")
     parser.add_argument("--launch", action="store_true", help="Launch Claude after installation")
     args = parser.parse_args()
 
-    require_file(FRONTEND_TRANSLATION)
-    require_file(DESKTOP_TRANSLATION)
-    require_file(LOCALIZABLE_STRINGS)
+    lang_code = args.lang
+    config = get_language_config(lang_code)
+    label = config["label"]
+
+    require_file(config["frontend_translation"])
+    require_file(config["desktop_translation"])
+    require_file(config["localizable_strings"])
     if not args.app.exists():
         raise SystemExit(f"Claude.app not found: {args.app}")
     require_virtualization_entitlement(args.app)
@@ -707,23 +729,23 @@ def main() -> int:
         print("[dry-run] Claude will not be quit.")
     else:
         quit_claude()
-    tmp_root = Path(tempfile.mkdtemp(prefix="claude-zh-cn-patch."))
+    tmp_root = Path(tempfile.mkdtemp(prefix=f"claude-{lang_code}-patch."))
     patched_app = tmp_root / "Claude.app"
 
     copy_app(args.app, patched_app)
     patch_language_whitelist(patched_app)
     patch_hardcoded_frontend_strings(patched_app)
     patch_custom3p_model_validation(patched_app)
-    merge_frontend_locale(patched_app)
-    install_desktop_locale(patched_app)
-    install_statsig_locale(patched_app)
+    merge_frontend_locale(patched_app, lang_code)
+    install_desktop_locale(patched_app, lang_code)
+    install_statsig_locale(patched_app, lang_code)
     resign_app(patched_app)
     clear_quarantine(patched_app)
     if args.dry_run:
         print(f"[dry-run] Would set Claude config locale under: {args.user_home}")
     else:
-        set_user_locale(args.user_home)
-    verify(patched_app)
+        set_user_locale(args.user_home, lang_code)
+    verify(patched_app, lang_code)
 
     backup = backup_and_replace(args.app, patched_app, args.dry_run)
     if not args.dry_run:
@@ -731,7 +753,7 @@ def main() -> int:
         if args.launch:
             run(["open", "-a", str(args.app)], check=False)
 
-    print("Done. Select Language -> 中文（中国） in Claude if it is not already selected.")
+    print(f"Done. Select Language -> {label} in Claude if it is not already selected.")
     return 0
 
 

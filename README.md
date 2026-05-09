@@ -1,19 +1,21 @@
-# Claude Desktop 中文补丁（zh-CN）
+# Claude Desktop 中文补丁
 
-一个用于 Claude Desktop 的中文界面补丁。
-macOS 可双击 `install-mac.command`，Windows 可右键管理员运行 `install-windows.bat`，给 Claude Desktop 添加 `中文（中国）` 语言选项，并安装中文界面资源。
+一个用于 Claude Desktop 的中文界面补丁，支持简体中文、繁体中文（台湾）和繁体中文（香港）。
+
+macOS 可双击 `install-mac.command`，Windows 可右键管理员运行 `install-windows.bat`，给 Claude Desktop 添加中文语言选项，并安装中文界面资源。
 
 本汉化方案仅支持使用 API 的方式。请先参照 https://linux.do/t/topic/2032192 配置
 
 ## 功能特点
 
 - 一键安装 Claude Desktop 中文界面资源，支持 macOS 和 Windows。
-- 自动给 Claude 前端语言白名单加入 `zh-CN`。
+- 支持三种中文变体：`zh-CN`（简体中文）、`zh-TW`（繁体中文（台湾））、`zh-HK`（繁体中文（香港））。
+- 自动给 Claude 前端语言白名单加入所有中文变体。
 - macOS 自动合并当前 Claude 版本的英文语言文件与随包中文翻译。
 - 新版本新增但暂未翻译的字段会保留英文，避免界面缺失文本。
 - macOS 和 Windows 自动绕过新版 Claude Desktop 对 3P gateway 模型名的本地 Anthropic 校验，避免 `deepseek-v4-pro` / `kimi-*` 等模型名导致配置整体失效。
 - macOS 安装前自动备份原始 `/Applications/Claude.app`。
-- 自动写入 Claude 用户配置，将语言设置为 `zh-CN`。
+- 自动写入 Claude 用户配置，将语言设置为所选中文变体。
 
 ## 适用环境
 
@@ -29,15 +31,21 @@ macOS 可双击 `install-mac.command`，Windows 可右键管理员运行 `instal
 1. 退出 Claude Desktop。
 2. 下载或克隆本项目。
 3. 双击 `install-mac.command`。
-4. 按提示输入 Mac 登录密码。
-5. Claude 会自动重新打开。
-6. 如果没有自动切换，打开左下角账号菜单，选择 `Language` -> `中文（中国）`。
+4. 选择要安装的语言（1=简体中文，2=繁体中文（台湾），3=繁体中文（香港））。
+5. 按提示输入 Mac 登录密码。
+6. Claude 会自动重新打开。
+7. 如果没有自动切换，打开左下角账号菜单，选择 `Language` -> 对应的中文选项。
 
 也可以在终端运行：
 
 ```bash
 cd /path/to/claude-desktop-zh-cn
-sudo /usr/bin/python3 scripts/patch_claude_zh_cn.py --user-home "$HOME" --launch
+# 简体中文
+sudo /usr/bin/python3 scripts/patch_claude_zh_cn.py --user-home "$HOME" --lang zh-CN --launch
+# 繁体中文（台湾）
+sudo /usr/bin/python3 scripts/patch_claude_zh_cn.py --user-home "$HOME" --lang zh-TW --launch
+# 繁体中文（香港）
+sudo /usr/bin/python3 scripts/patch_claude_zh_cn.py --user-home "$HOME" --lang zh-HK --launch
 ```
 
 ### Windows
@@ -45,15 +53,24 @@ sudo /usr/bin/python3 scripts/patch_claude_zh_cn.py --user-home "$HOME" --launch
 1. 退出 Claude Desktop。
 2. 下载或克隆本项目。
 3. 右键 `install-windows.bat`，选择以管理员身份运行。
-4. 在菜单中选择 `1` 安装中文补丁。
+4. 在菜单中选择语言：
+   - `1` 简体中文
+   - `2` 繁体中文（台湾）
+   - `3` 繁体中文（香港）
+   - `4` 卸载补丁
 5. 脚本会写入本仓库 `resources` 目录里的中文 JSON，补齐硬编码界面文本，修复 3P gateway 模型名校验，并重启 Claude Desktop。
-6. 如果没有自动切换，打开左下角账号菜单，选择 `Language` -> `中文（中国）`。
+6. 如果没有自动切换，打开左下角账号菜单，选择 `Language` -> 对应的中文选项。
 
 也可以在 PowerShell 中运行：
 
 ```powershell
 cd path\to\claude-desktop-zh-cn
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 install
+# 简体中文
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 install zh-CN
+# 繁体中文（台湾）
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 install zh-TW
+# 繁体中文（香港）
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 install zh-HK
 ```
 
 ## 从 GitHub 下载
@@ -77,22 +94,22 @@ chmod +x install-mac.command
 - `install-windows.bat`：Windows 安装 / 恢复菜单入口。
 - `scripts/install_windows.ps1`：Windows 汉化安装和卸载脚本。
 - `scripts/patch_claude_zh_cn.py`：真正执行补丁的 Python 脚本。
-- `resources/manifest.json`：语言包信息。
-- `resources/frontend-zh-CN.json`：Claude 前端界面中文翻译。
-- `resources/desktop-zh-CN.json`：Claude 桌面壳层中文翻译。
-- `resources/Localizable.strings`：macOS 原生菜单中文资源。
-- `resources/statsig-zh-CN.json`：statsig i18n 兜底资源。
+- `resources/manifest.json` / `manifest-zh-TW.json` / `manifest-zh-HK.json`：语言包信息。
+- `resources/frontend-zh-CN.json` / `frontend-zh-TW.json` / `frontend-zh-HK.json`：Claude 前端界面中文翻译。
+- `resources/desktop-zh-CN.json` / `desktop-zh-TW.json` / `desktop-zh-HK.json`：Claude 桌面壳层中文翻译。
+- `resources/Localizable.strings` / `Localizable-zh-TW.strings` / `Localizable-zh-HK.strings`：macOS 原生菜单中文资源。
+- `resources/statsig-zh-CN.json` / `statsig-zh-TW.json` / `statsig-zh-HK.json`：statsig i18n 兜底资源。
 
 ## macOS 脚本会做什么
 
 - 备份当前 `/Applications/Claude.app` 到同目录，名字类似：
   `Claude.backup-before-zh-CN-20260424-120000.app`
 - 复制 Claude.app 到临时目录并打补丁。
-- 给前端语言白名单加入 `zh-CN`。
+- 给前端语言白名单加入 `zh-CN`、`zh-TW`、`zh-HK`。
 - 对 `Contents/Resources/app.asar` 做等长补丁，关闭 3P gateway 启动阶段的 `inferenceModels` Anthropic 名称校验。
 - 合并当前 Claude 版本的 `en-US.json` 和随包中文翻译：
   当前版本已有中文翻译的 key 会变中文，新版本新增但本包没有的 key 会保留英文，避免应用缺字段。
-- 写入 `~/Library/Application Support/Claude/config.json`，设置 `"locale": "zh-CN"`。
+- 写入 `~/Library/Application Support/Claude/config.json`，设置 `"locale"` 为所选语言代码（`zh-CN`、`zh-TW` 或 `zh-HK`）。
 - 对修改后的 Claude.app 及其内部 app/framework/原生二进制做一致的本机 ad-hoc 重签名，并清除 `com.apple.quarantine` 隔离属性。
 - 重新启动 Claude。
 
@@ -101,13 +118,13 @@ chmod +x install-mac.command
 - 查找 Windows 版 Claude Desktop 安装目录。
 - 修改前备份将被改动的前端 JS bundle、`app.asar` 和 `Claude.exe` 到 `resources\.zh-cn-backups`。
 - 复制本仓库现有中文资源，不使用其他语言包项目里的 JSON：
-  - `resources/frontend-zh-CN.json` -> `ion-dist\i18n\zh-CN.json`
-  - `resources/desktop-zh-CN.json` -> `resources\zh-CN.json`
-  - `resources/statsig-zh-CN.json` -> `ion-dist\i18n\statsig\zh-CN.json`
-- 给前端语言白名单加入 `zh-CN`。
+  - `resources/frontend-zh-CN.json` / `frontend-zh-TW.json` / `frontend-zh-HK.json` -> `ion-dist\i18n\` 对应语言代码 `.json`
+  - `resources/desktop-zh-CN.json` / `desktop-zh-TW.json` / `desktop-zh-HK.json` -> `resources\` 对应语言代码 `.json`
+  - `resources/statsig-zh-CN.json` / `statsig-zh-TW.json` / `statsig-zh-HK.json` -> `ion-dist\i18n\statsig\` 对应语言代码 `.json`
+- 给前端语言白名单加入 `zh-CN`、`zh-TW`、`zh-HK`。
 - 汉化前端 bundle 中未走 i18n JSON 的硬编码界面文本，例如侧边栏入口、配置页标签和模型选择项。
 - 对 `resources\app.asar` 做等长补丁，关闭 3P gateway 启动阶段的 `inferenceModels` Anthropic 名称校验，并同步更新 asar 内部文件完整性信息和 `Claude.exe` 内嵌的 asar header hash。
-- 写入 Windows 用户配置，将语言设置为 `zh-CN`。
+- 写入 Windows 用户配置，将语言设置为所选语言代码（`zh-CN`、`zh-TW` 或 `zh-HK`）。
 - 重启 Claude Desktop。
 
 ## 注意
@@ -134,11 +151,12 @@ Claude.backup-before-zh-CN-20260424-120000.app
 
 如需恢复，可退出 Claude Desktop 后，将当前 `/Applications/Claude.app` 移走，再把备份 app 改名为 `Claude.app`。
 
-Windows 脚本安装时会把被修改的前端 JS bundle、`app.asar` 和 `Claude.exe` 备份到 Claude 安装目录下的 `resources\.zh-cn-backups`。如需恢复，退出 Claude Desktop 后，右键 `install-windows.bat`，选择以管理员身份运行，并在菜单中选择 `2`。
+Windows 脚本安装时会把被修改的前端 JS bundle、`app.asar` 和 `Claude.exe` 备份到 Claude 安装目录下的 `resources\.zh-cn-backups`。如需恢复，退出 Claude Desktop 后，右键 `install-windows.bat`，选择以管理员身份运行，并在菜单中选择 `4`（卸载补丁）。
 
 也可以在 PowerShell 中运行：
 
 ```powershell
+# 卸载（会移除所有中文资源并恢复为英文）
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 uninstall
 ```
 
