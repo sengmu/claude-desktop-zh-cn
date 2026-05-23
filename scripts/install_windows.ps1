@@ -19,6 +19,8 @@ $LanguageListPattern = [System.Text.RegularExpressions.Regex]::Escape($BaseLangu
 $AsarPatchTarget = ".vite/build/index.js"
 $AsarIntegrityBlockSize = 4 * 1024 * 1024
 $script:CurrentBackupSetPath = $null
+$script:DetectedUnpackagedClaudePaths = @()
+$script:DetectedMultipleClaudeInstalls = $false
 
 function Read-InteractiveSelection {
     Write-Host "=== Claude Desktop Windows 中文补丁 ==="
@@ -89,6 +91,45 @@ function Write-Step {
     Write-Host $Message -ForegroundColor Yellow
 }
 
+function Get-UnpackagedClaudePaths {
+    $localAppData = [Environment]::GetFolderPath('LocalApplicationData')
+    if (-not $localAppData) {
+        return @()
+    }
+
+    $unpackagedBase = Join-Path $localAppData "AnthropicClaude"
+    if (-not (Test-Path $unpackagedBase)) {
+        return @()
+    }
+
+    return @(Get-ChildItem $unpackagedBase -Directory -Filter "app-*" -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        ForEach-Object { $_.FullName })
+}
+
+function Write-MultipleClaudeInstallWarning {
+    param(
+        [string]$ClaudePath,
+        [string]$ResourcesPath,
+        [string[]]$IgnoredPaths
+    )
+
+    Write-Host "  [警告] 检测到多个 Claude Desktop 安装。" -ForegroundColor Yellow
+    Write-Host "  本脚本只会汉化 WindowsApps/AppX 版本: $ClaudePath" -ForegroundColor Yellow
+    Write-Host "  resources: $ResourcesPath" -ForegroundColor Yellow
+    foreach ($ignoredPath in $IgnoredPaths) {
+        Write-Host "  已忽略: $ignoredPath" -ForegroundColor Yellow
+    }
+    Write-Host "  如果失败，请卸载另一个 Claude Desktop 版本后重试。" -ForegroundColor Yellow
+}
+
+function Write-MultipleClaudeFailureHint {
+    Write-Host ""
+    Write-Host "[提示] 检测到多个 Claude Desktop 版本，本脚本只汉化 WindowsApps/AppX 版本。" -ForegroundColor Yellow
+    Write-Host "[提示] 请卸载另一个版本后重试。" -ForegroundColor Yellow
+    Write-Host "[提示] 请及时到 Claude 官网升级最新版 Claude Desktop。" -ForegroundColor Yellow
+}
+
 function Find-ClaudePath {
     $packages = @(Get-AppxPackage -Name "Claude" -ErrorAction SilentlyContinue)
     foreach ($package in $packages) {
@@ -108,14 +149,29 @@ function Find-ClaudePath {
 }
 
 function Get-ClaudeResourcesPath {
+    $script:DetectedUnpackagedClaudePaths = @(Get-UnpackagedClaudePaths)
+    $script:DetectedMultipleClaudeInstalls = $false
+
     $claudePath = Find-ClaudePath
     if (-not $claudePath) {
+        if ($script:DetectedUnpackagedClaudePaths.Count -gt 0) {
+            $detectedPaths = $script:DetectedUnpackagedClaudePaths -join "; "
+            throw "当前脚本不支持此安装路径 %LocalAppData%\AnthropicClaude\app-*。检测到: $detectedPaths。请到 Claude 官网升级/安装最新版 Claude Desktop 后重试。"
+        }
         throw "未找到 Claude Desktop 安装。"
+    }
+
+    if ($script:DetectedUnpackagedClaudePaths.Count -gt 0) {
+        $script:DetectedMultipleClaudeInstalls = $true
     }
 
     $resourcesPath = Join-Path $claudePath "app\resources"
     if (-not (Test-Path $resourcesPath)) {
         throw "未找到 Claude resources 目录: $resourcesPath"
+    }
+
+    if ($script:DetectedMultipleClaudeInstalls) {
+        Write-MultipleClaudeInstallWarning $claudePath $resourcesPath $script:DetectedUnpackagedClaudePaths
     }
 
     return @{
@@ -1175,61 +1231,69 @@ function Install-WindowsLanguagePack {
     $label = Get-LanguageLabel $LanguageCode
     Write-Host "=== Claude Desktop Windows $label 补丁 ===" -ForegroundColor Cyan
 
-    Write-Step "[1/9] 检查第三方 API 配置"
-    if (-not (Confirm-InstallWithoutThirdPartyApiConfig)) {
-        return
+    try {
+        Write-Step "[1/9] 检查第三方 API 配置"
+        if (-not (Confirm-InstallWithoutThirdPartyApiConfig)) {
+            return
+        }
+
+        Write-Step "[2/9] 检查语言资源"
+        $pack = Get-LanguageResources $LanguageCode
+
+        Write-Step "[3/9] 查找 Claude Desktop"
+        $paths = Get-ClaudeResourcesPath
+        $claudePath = $paths["App"]
+        $resourcesPath = $paths["Resources"]
+        Write-Host "  app: $claudePath" -ForegroundColor Green
+        Write-Host "  resources: $resourcesPath" -ForegroundColor Green
+
+        Write-Step "关闭 Claude Desktop"
+        Stop-ClaudeProcesses
+
+        Write-Step "[4/9] 准备写入权限"
+        Enable-WriteAccess $resourcesPath
+
+        Write-Step "[5/9] 写入 $label 资源"
+        Install-LanguageFiles $resourcesPath $pack $LanguageCode
+
+        Write-Step "[6/9] 注册中文语言"
+        Register-Language $resourcesPath $LanguageCode
+
+        Write-Step "[7/9] 汉化硬编码界面文本"
+        Patch-HardcodedFrontendStrings $resourcesPath $LanguageCode
+        Patch-LanguageDisplayNames $resourcesPath
+        if ($SkipAsarPatch) {
+            Write-Host "  skipping main-process menu label patch (app.asar) due to -SkipAsarPatch" -ForegroundColor DarkYellow
+        } else {
+            Patch-HardcodedMainProcessMenuLabels $resourcesPath $LanguageCode
+        }
+
+        Write-Step "[8/9] 修复第三方模型名校验"
+        if ($SkipAsarPatch) {
+            Write-Host "  skipping 3P model validation patch (app.asar) due to -SkipAsarPatch" -ForegroundColor DarkYellow
+        } else {
+            Patch-Custom3PModelValidation $resourcesPath
+        }
+
+        if ($SkipAsarPatch) {
+            Write-Host "  skipping Claude.exe asar integrity sync due to -SkipAsarPatch" -ForegroundColor DarkYellow
+        }
+
+        Write-Step "[9/9] 写入用户语言配置"
+        Set-ClaudeLocale $LanguageCode
+
+        Write-Step "重启 Claude Desktop"
+        Restart-Claude $claudePath
+
+        Write-Host ""
+        Write-Host "安装完成。如果界面未立即切换，请在 Language 中选择 $label。" -ForegroundColor Green
     }
-
-    Write-Step "[2/9] 检查语言资源"
-    $pack = Get-LanguageResources $LanguageCode
-
-    Write-Step "[3/9] 查找 Claude Desktop"
-    $paths = Get-ClaudeResourcesPath
-    $claudePath = $paths["App"]
-    $resourcesPath = $paths["Resources"]
-    Write-Host "  app: $claudePath" -ForegroundColor Green
-    Write-Host "  resources: $resourcesPath" -ForegroundColor Green
-
-    Write-Step "关闭 Claude Desktop"
-    Stop-ClaudeProcesses
-
-    Write-Step "[4/9] 准备写入权限"
-    Enable-WriteAccess $resourcesPath
-
-    Write-Step "[5/9] 写入 $label 资源"
-    Install-LanguageFiles $resourcesPath $pack $LanguageCode
-
-    Write-Step "[6/9] 注册中文语言"
-    Register-Language $resourcesPath $LanguageCode
-
-    Write-Step "[7/9] 汉化硬编码界面文本"
-    Patch-HardcodedFrontendStrings $resourcesPath $LanguageCode
-    Patch-LanguageDisplayNames $resourcesPath
-    if ($SkipAsarPatch) {
-        Write-Host "  skipping main-process menu label patch (app.asar) due to -SkipAsarPatch" -ForegroundColor DarkYellow
-    } else {
-        Patch-HardcodedMainProcessMenuLabels $resourcesPath $LanguageCode
+    catch {
+        if ($script:DetectedMultipleClaudeInstalls) {
+            Write-MultipleClaudeFailureHint
+        }
+        throw
     }
-
-    Write-Step "[8/9] 修复第三方模型名校验"
-    if ($SkipAsarPatch) {
-        Write-Host "  skipping 3P model validation patch (app.asar) due to -SkipAsarPatch" -ForegroundColor DarkYellow
-    } else {
-        Patch-Custom3PModelValidation $resourcesPath
-    }
-
-    if ($SkipAsarPatch) {
-        Write-Host "  skipping Claude.exe asar integrity sync due to -SkipAsarPatch" -ForegroundColor DarkYellow
-    }
-
-    Write-Step "[9/9] 写入用户语言配置"
-    Set-ClaudeLocale $LanguageCode
-
-    Write-Step "重启 Claude Desktop"
-    Restart-Claude $claudePath
-
-    Write-Host ""
-    Write-Host "安装完成。如果界面未立即切换，请在 Language 中选择 $label。" -ForegroundColor Green
 }
 
 function Uninstall-WindowsLanguagePack {
