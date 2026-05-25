@@ -78,7 +78,7 @@ macOS 可双击 `install-mac.command`，Windows 可右键管理员运行 `instal
 - `resources/Localizable.strings` / `Localizable-zh-TW.strings` / `Localizable-zh-HK.strings`：macOS 原生菜单中文资源。
 - `resources/statsig-zh-CN.json` / `statsig-zh-TW.json` / `statsig-zh-HK.json`：statsig i18n 兜底资源。
 
-## 卸载 / 恢复
+## 卸载 / 恢复 
 
 执行脚本，选择恢复即可。
 
