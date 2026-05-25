@@ -25,8 +25,8 @@ $script:DetectedMultipleClaudeInstalls = $false
 function Read-InteractiveSelection {
     Write-Host "=== Claude Desktop Windows 中文补丁 ==="
     Write-Host ""
-    Write-Host "[1] 安装中文补丁(会显示无法启动Claude的工作区,推荐使用[2])"
-    Write-Host "[2] 安装中文补丁(安全模式，跳过 app.asar 补丁,使用第三方模型需要搭配ccswitch使用)"
+    Write-Host "[1] 安装中文补丁(安全模式，跳过 app.asar 补丁,使用第三方模型需要搭配ccswitch使用)"
+    Write-Host "[2] 安装中文补丁(会显示无法启动Claude的工作区)"
     Write-Host "[3] 恢复原样 / 卸载补丁"
     Write-Host "[Q] 退出"
     Write-Host ""
@@ -36,8 +36,8 @@ function Read-InteractiveSelection {
     while (-not $actionSelected) {
         $actionSelection = (Read-Host "请选择操作 [1/2/3/Q]").Trim()
         switch -Regex ($actionSelection) {
-            '^[1]$' { $skipAsarPatchForInstall = $false; $actionSelected = $true }
-            '^[2]$' { $skipAsarPatchForInstall = $true; $actionSelected = $true }
+            '^[1]$' { $skipAsarPatchForInstall = $true; $actionSelected = $true }
+            '^[2]$' { $skipAsarPatchForInstall = $false; $actionSelected = $true }
             '^[3]$' { return @{ Action = "uninstall"; Language = "zh-CN"; SkipAsarPatch = $false } }
             '^[Qq]$' { exit 0 }
             default { Write-Host "请输入 1、2、3 或 Q。" -ForegroundColor Yellow }
