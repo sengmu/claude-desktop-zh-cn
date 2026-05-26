@@ -16,8 +16,56 @@
     "\"添加服务器\""
   ],
   [
+    "Add header",
+    "添加请求头"
+  ],
+  [
     "\"Appearance\"",
     "\"外观\""
+  ],
+  [
+    "Application",
+    "应用"
+  ],
+  [
+    "Allow Claude to automatically classify sessions as blocked, ready for review, or done. Classifying sessions counts towards your plan usage. Applies to new sessions.",
+    "允许 Claude 自动将会话分类为已阻止、待审核或已完成。分类会话会计入你的计划用量。适用于新会话。"
+  ],
+  [
+    "Are you sure you want to delete 1 chat? This cannot be undone.",
+    "你确定要删除 1 个聊天吗？此操作无法撤消。"
+  ],
+  [
+    "Are you sure you want to delete {count} chat? This cannot be undone.",
+    "你确定要删除 {count} 个聊天吗？此操作无法撤消。"
+  ],
+  [
+    "Are you sure you want to delete {count} chats? This cannot be undone.",
+    "你确定要删除 {count} 个聊天吗？此操作无法撤消。"
+  ],
+  [
+    "Authorization tokens",
+    "授权令牌"
+  ],
+  [
+    "Auto-archive after PR merge or close",
+    "PR 合并或关闭后自动归档"
+  ],
+  [
+    "Automatically archive desktop sessions when the associated pull request is merged or closed.",
+    "关联的拉取请求合并或关闭后，自动归档桌面会话。"
+  ],
+  [
+    "Autofix pull requests",
+    "自动修复拉取请求"
+  ],
+  [
+    "Auto-populate the model picker from /v1/models at launch.",
+    "启动时从 /v1/models 自动填充模型选择器。"
+  ],
+  [
+    "Auto-populate the model picker from {url} at launch.",
+    "启动时从 {url} 自动填充模型选择器。"
   ],
   [
     "\"Background color\"",
@@ -32,12 +80,64 @@
     "\"复制主机名\""
   ],
   [
+    "Claude understands your codebase and helps you build, debug, and ship faster. Upgrade your plan to get started.",
+    "Claude 了解你的代码库，能帮助你更快地构建、调试和发布。升级你的计划即可开始使用。"
+  ],
+  [
+    "Claude understands your codebase and helps you build, debug, and ship faster. Get started in the desktop app.",
+    "Claude 了解你的代码库，能帮助你更快地构建、调试和发布。请在桌面应用中开始使用。"
+  ],
+  [
+    "Claude Code (CLI, Desktop, IDE)",
+    "Claude Code（CLI、桌面版、IDE）"
+  ],
+  [
+    "Claude Light",
+    "Claude 浅色"
+  ],
+  [
+    "Claude Dark",
+    "Claude 深色"
+  ],
+  [
+    "Classify session states",
+    "分类会话状态"
+  ],
+  [
+    "Created when you sign in to Claude Code. Revoke a token to sign out from that device.",
+    "登录 Claude Code 时创建。撤销令牌即可让该设备退出登录。"
+  ],
+  [
     "\"Create your first scheduled task\"",
     "\"创建你的第一个计划任务\""
   ],
   [
+    "Choose where Claude Desktop sends inference requests.",
+    "选择 Claude Desktop 将推理请求发送到哪里。"
+  ],
+  [
+    "Connection",
+    "连接"
+  ],
+  [
+    "Connectors & extensions",
+    "连接器与扩展"
+  ],
+  [
+    "Credential kind",
+    "凭据类型"
+  ],
+  [
+    "Custom inference headers",
+    "自定义推理请求头"
+  ],
+  [
     "\"Daily brief\"",
     "\"每日简报\""
+  ],
+  [
+    "Default",
+    "默认"
   ],
   [
     "\"Display instructions, policies, or notices as a persistent strip across the top of the app window.\"",
@@ -52,8 +152,76 @@
     "\"防火墙允许列表\""
   ],
   [
+    "Egress Requirements",
+    "出站要求"
+  ],
+  [
+    "Delete sessions stored by Anthropic",
+    "删除 Anthropic 存储的会话"
+  ],
+  [
+    "Permanently delete Anthropic's server-side copies of your Claude Code sessions. Sessions stored locally on your computer aren't affected. Claude Code on the web sessions are managed separately — go to Claude Code.",
+    "永久删除 Anthropic 服务器端保存的 Claude Code 会话副本。本机存储的会话不受影响。网页版 Claude Code 会话需要单独管理，请前往 Claude Code。"
+  ],
+  [
+    "Permanently delete Anthropic’s server-side copies of your Claude Code sessions. Sessions stored locally on your computer aren’t affected. Claude Code on the web sessions are managed separately — go to Claude Code.",
+    "永久删除 Anthropic 服务器端保存的 Claude Code 会话副本。本机存储的会话不受影响。网页版 Claude Code 会话需要单独管理，请前往 Claude Code。"
+  ],
+  [
+    "Extensions",
+    "扩展"
+  ],
+  [
+    "Extra HTTP headers sent on every inference request to the configured provider. For tenant routing, org IDs, Bedrock Guardrails, etc.",
+    "每次向所配置提供商发送推理请求时附加的 HTTP 请求头。可用于租户路由、组织 ID、Bedrock Guardrails 等场景。"
+  ],
+  [
+    "High-contrast dark theme",
+    "高对比度深色主题"
+  ],
+  [
+    "Use a darker, near-black background when dark mode is on.",
+    "开启深色模式时使用更暗、接近黑色的背景。"
+  ],
+  [
+    "When you create a pull request, Claude automatically monitors it for CI failures and review comments, then responds proactively. Claude may post comments on your behalf.",
+    "创建拉取请求后，Claude 会自动监控 CI 失败和评审评论，并主动响应。Claude 可能会代表你发表评论。"
+  ],
+  [
+    "Browse extensions",
+    "浏览扩展"
+  ],
+  [
+    "Full URL of the inference gateway endpoint.",
+    "推理网关端点的完整 URL。"
+  ],
+  [
+    "Gateway",
+    "网关"
+  ],
+  [
+    "Gateway base URL",
+    "网关基础 URL"
+  ],
+  [
+    "GATEWAY CREDENTIALS",
+    "网关凭据"
+  ],
+  [
+    "网关 credentials",
+    "网关凭据"
+  ],
+  [
+    "{provider} credentials",
+    "{provider} 凭据"
+  ],
+  [
     "\"Internal use only\"",
     "\"仅供内部使用\""
+  ],
+  [
+    "Learn more",
+    "了解更多"
   ],
   [
     "\"Link URL\"",
@@ -76,6 +244,30 @@
     "\"新建任务\""
   ],
   [
+    "Model discovery",
+    "模型发现"
+  ],
+  [
+    "Model list",
+    "模型列表"
+  ],
+  [
+    "Models",
+    "模型"
+  ],
+  [
+    "Models to show in the picker. First entry is the default.",
+    "显示在模型选择器中的模型。第一项为默认模型。"
+  ],
+  [
+    "MODELS",
+    "模型"
+  ],
+  [
+    "Override the auto-discovered model list. First entry is the default.",
+    "覆盖自动发现的模型列表。第一项为默认模型。"
+  ],
+  [
     "\"No organization plugins found\"",
     "\"未找到组织插件\""
   ],
@@ -86,6 +278,10 @@
   [
     "\"Optional HTTPS URL. The banner text becomes a link when set.\"",
     "\"可选 HTTPS URL。设置后，横幅文本会变为链接。\""
+  ],
+  [
+    "Plugins & skills",
+    "插件与技能"
   ],
   [
     "\"Organization banner\"",
@@ -104,6 +300,14 @@
     "\"搜索\""
   ],
   [
+    "Search settings",
+    "搜索设置"
+  ],
+  [
+    "Selects the credential source. When set, only that source is used (no fallback).",
+    "选择凭据来源。设置后只会使用该来源，不会回退。"
+  ],
+  [
     "\"Show banner\"",
     "\"显示横幅\""
   ],
@@ -114,6 +318,278 @@
   [
     "\"Single line, truncated on overflow. Maximum 200 characters.\"",
     "\"单行，溢出时截断。最多 200 个字符。\""
+  ],
+  [
+    "Telemetry & updates",
+    "诊断与更新"
+  ],
+  [
+    "Usage limits",
+    "使用限制"
+  ],
+  [
+    "Workspace restrictions",
+    "工作区限制"
+  ],
+  [
+    "Allow all",
+    "全部允许"
+  ],
+  [
+    "Allow Claude Code tab",
+    "允许 Claude Code 标签页"
+  ],
+  [
+    "Allow desktop extensions",
+    "允许桌面扩展"
+  ],
+  [
+    "Allow user-added MCP servers",
+    "允许用户添加 MCP 服务器"
+  ],
+  [
+    "Allowed egress hosts",
+    "允许的出站主机"
+  ],
+  [
+    "Allowed workspace folders",
+    "允许的工作区文件夹"
+  ],
+  [
+    "AUTO-UPDATES",
+    "自动更新"
+  ],
+  [
+    "ANTHROPIC TELEMETRY",
+    "Anthropic 遥测"
+  ],
+  [
+    "Block essential telemetry",
+    "阻止必要遥测"
+  ],
+  [
+    "Block nonessential services",
+    "阻止非必要服务"
+  ],
+  [
+    "Block nonessential telemetry",
+    "阻止非必要遥测"
+  ],
+  [
+    "Built-in tool policy",
+    "内置工具策略"
+  ],
+  [
+    "Built-in tools removed from Cowork.",
+    "从 Cowork 中移除的内置工具。"
+  ],
+  [
+    "Choose from disk",
+    "从磁盘选择"
+  ],
+  [
+    "Choose...",
+    "选择..."
+  ],
+  [
+    ".dxt and .mcpb installs.",
+    ".dxt 和 .mcpb 安装包。"
+  ],
+  [
+    "Copy",
+    "复制"
+  ],
+  [
+    "CORE (VM BUNDLE + CLAUDE CLI BINARY)",
+    "核心（VM 包 + Claude CLI 二进制文件）"
+  ],
+  [
+    "DESKTOP EXTENSIONS (PYTHON RUNTIME)",
+    "桌面扩展（Python 运行时）"
+  ],
+  [
+    "Disable Claude.ai sign-in",
+    "禁用 Claude.ai 登录"
+  ],
+  [
+    "Disable claude:// deep-link handling",
+    "禁用 claude:// 深度链接处理"
+  ],
+  [
+    "Disabled built-in tools",
+    "禁用内置工具"
+  ],
+  [
+    "Domains Cowork's tools may reach during a turn. Also surfaced under Egress Requirements.",
+    "Cowork 的工具在一次任务中可以访问的域名。也会显示在出站要求中。"
+  ],
+  [
+    "Domains Cowork's tools may reach during a turn. Also surfaced under 出站要求.",
+    "Cowork 的工具在一次任务中可以访问的域名。也会显示在出站要求中。"
+  ],
+  [
+    "ESSENTIAL TELEMETRY",
+    "必要遥测"
+  ],
+  [
+    "EXTENSIONS",
+    "扩展"
+  ],
+  [
+    "Favicon fetch and the artifact-preview iframe origin. Artifacts will not render.",
+    "获取网站图标和 Artifact 预览 iframe 来源。Artifacts 将无法渲染。"
+  ],
+  [
+    "Folders users may attach as a workspace. Leave unset for unrestricted access.",
+    "用户可作为工作区附加的文件夹。留空则不限制。"
+  ],
+  [
+    "Hosts your network firewall must allow, derived from your current settings. This list is read-only and updates as you make changes. Traffic is HTTPS on port 443 unless a custom port is specified (OTLP, gateway, or MCP server URLs).",
+    "根据当前设置生成的网络防火墙放行清单。此列表为只读，并会随配置变更自动更新。除非指定了自定义端口（OTLP、网关或 MCP 服务器 URL），否则流量均为 443 端口上的 HTTPS。"
+  ],
+  [
+    "Local stdio servers added via the Developer settings. Remote servers come from the managed list above, or plugins mounted to a user's computer by an organization admin.",
+    "通过开发者设置添加的本地 stdio 服务器。远程服务器来自上方托管列表，或来自组织管理员挂载到用户电脑上的插件。"
+  ],
+  [
+    "Managed MCP servers",
+    "托管的 MCP 服务器"
+  ],
+  [
+    "Max tokens per window",
+    "每窗口最大令牌数"
+  ],
+  [
+    "MCP SERVERS",
+    "MCP 服务器"
+  ],
+  [
+    "Mount plugin bundles to this folder using your device-management tool and Cowork will load them at launch. The folder is read-only; tool policies you set below are saved in this configuration.",
+    "使用设备管理工具将插件包挂载到此文件夹，Cowork 会在启动时加载。该文件夹为只读；下面设置的工具策略会保存在此配置中。"
+  ],
+  [
+    "NONESSENTIAL SERVICES",
+    "非必要服务"
+  ],
+  [
+    "NONESSENTIAL TELEMETRY",
+    "非必要遥测"
+  ],
+  [
+    "ORGANIZATION PLUGINS",
+    "组织插件"
+  ],
+  [
+    "Organization UUID",
+    "组织 UUID"
+  ],
+  [
+    "Org-pushed MCP servers: remote (HTTP/SSE) or local (stdio command). May embed bearer tokens.",
+    "组织推送的 MCP 服务器：远程（HTTP/SSE）或本地（stdio 命令）。可能嵌入 Bearer 令牌。"
+  ],
+  [
+    "Per-tool approval policy. \"ask\" requires user approval before each call; \"allow\" is the default. Use Disabled built-in tools to remove a tool entirely.",
+    "按工具设置的审批策略。\"ask\" 表示每次调用前都需要用户批准；\"allow\" 为默认值。如需完全移除某个工具，请使用“禁用内置工具”。"
+  ],
+  [
+    "Per-user soft cap, counted client-side over the duration below. Not a server-enforced quota.",
+    "按用户设置的软上限，会在下方时长内由客户端统计。不是服务器强制执行的配额。"
+  ],
+  [
+    "Product-usage analytics and diagnostic-report uploads. No message content.",
+    "产品使用分析和诊断报告上传。不包含消息内容。"
+  ],
+  [
+    "Prompts, completions, and your data are never sent to Anthropic. Telemetry covers crash and usage signals only.",
+    "提示、补全和你的数据绝不会发送给 Anthropic。遥测只包含崩溃和使用信号。"
+  ],
+  [
+    "Reject desktop extensions that are not signed by a trusted publisher.",
+    "拒绝未由受信任发布者签名的桌面扩展。"
+  ],
+  [
+    "Require signed extensions",
+    "要求扩展已签名"
+  ],
+  [
+    "Show the Code tab (terminal-based coding sessions). Sessions run on the host, not inside the VM.",
+    "显示 Code 标签页（基于终端的编码会话）。会话在宿主机上运行，不在 VM 内运行。"
+  ],
+  [
+    "Tags telemetry events with your organization's UUID so Anthropic support can find them. Not used for auth.",
+    "使用你组织的 UUID 标记遥测事件，方便 Anthropic 支持人员定位。不会用于认证。"
+  ],
+  [
+    "tokens",
+    "令牌"
+  ],
+  [
+    "Users see only this provider at the login screen. The option to sign in to Claude.ai is hidden.",
+    "用户在登录页只会看到此提供商。Claude.ai 登录选项会被隐藏。"
+  ],
+  [
+    "Crash and performance reports to Anthropic.",
+    "发送给 Anthropic 的崩溃和性能报告。"
+  ],
+  [
+    "Add server policy",
+    "添加服务器策略"
+  ],
+  [
+    "+ Add server policy",
+    "+ 添加服务器策略"
+  ],
+  [
+    "Add policy",
+    "添加策略"
+  ],
+  [
+    "Anthropic telemetry",
+    "Anthropic 遥测"
+  ],
+  [
+    "OpenTelemetry",
+    "OpenTelemetry 遥测"
+  ],
+  [
+    "OpenTelemetry collector endpoint",
+    "OpenTelemetry 收集器端点"
+  ],
+  [
+    "Where Cowork sends OpenTelemetry logs and metrics. Leave blank to disable.",
+    "Cowork 发送 OpenTelemetry 日志和指标的位置。留空则禁用。"
+  ],
+  [
+    "Updates",
+    "更新"
+  ],
+  [
+    "Block auto-updates",
+    "阻止自动更新"
+  ],
+  [
+    "Stop Cowork from fetching updates. You'll need to push new versions yourself.",
+    "阻止 Cowork 获取更新。你需要自行推送新版本。"
+  ],
+  [
+    "Auto-update enforcement window",
+    "自动更新强制窗口"
+  ],
+  [
+    "Hours before a downloaded update force-installs. Blank = 72-hour default.",
+    "已下载更新在强制安装前等待的小时数。留空则默认为 72 小时。"
+  ],
+  [
+    "hours",
+    "小时"
+  ],
+  [
+    "<b>{category}</b> needs {count, plural, one {{label}} other {# fields}}",
+    "<b>{category}</b> 需要 {count, plural, one {{label}} other {# 个字段}}"
+  ],
+  [
+    "Per-tool approval policy. \"ask\" requires user approval before each call; \"allow\" is the default. Use 禁用内置工具 to remove a tool entirely.",
+    "按工具设置的审批策略。“ask” 表示每次调用前都需要用户批准；“allow” 为默认值。如需完全移除某个工具，请使用“禁用内置工具”。"
   ],
   [
     "\"Six-digit hex (#RRGGBB). Applied exactly as configured; not theme-adapted.\"",
@@ -162,6 +638,18 @@
   [
     "\"Write a message…\"",
     "\"输入消息...\""
+  ],
+  [
+    "Hi! How can I help you today?",
+    "你好！今天我能为你提供什么帮助？"
+  ],
+  [
+    "Write a message...",
+    "输入消息..."
+  ],
+  [
+    "Write a message…",
+    "输入消息..."
   ],
   [
     "\"aria-label\":\"Search projects\"",

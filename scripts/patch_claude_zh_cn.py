@@ -43,6 +43,13 @@ FRONTEND_ASSETS_REL = Path("Contents/Resources/ion-dist/assets/v1")
 DESKTOP_RESOURCES_REL = Path("Contents/Resources")
 ASAR_PATCH_TARGET = ".vite/build/index.js"
 ASAR_INTEGRITY_BLOCK_SIZE = 4 * 1024 * 1024
+ONLINE_LOCALE_PRELOAD_TARGETS = [
+    ".vite/build/mainView.js",
+    ".vite/build/mainWindow.js",
+]
+ONLINE_LOCALE_MARKER = "__claudeZhOnlineLocale"
+ONLINE_LOCALE_MAIN_MARKER = "__claudeZhOnlineLocaleMain"
+ONLINE_TRANSLATION_MAX_SOURCE_LEN = 240
 
 LANG_LIST_RE = re.compile(
     r'\["en-US","de-DE","fr-FR","ko-KR","ja-JP","es-419","es-ES","it-IT","hi-IN","pt-BR","id-ID"(?:(?:,"zh-CN")|(?:,"zh-TW")|(?:,"zh-HK"))*\]'
@@ -193,9 +200,34 @@ def load_frontend_hardcoded_replacements(lang_code: str) -> list[tuple[str, str]
     return replacements
 
 
+def is_plain_ui_text_replacement(source: str) -> bool:
+    code_markers = ['"', "\\", "=", ";", "=>"]
+    return "\n" not in source and not any(marker in source for marker in code_markers)
+
+
+def replace_frontend_hardcoded_text(text: str, source: str, target: str) -> tuple[str, int]:
+    if not is_plain_ui_text_replacement(source):
+        count = text.count(source)
+        if count:
+            text = text.replace(source, target)
+        return text, count
+
+    pattern = re.compile(r'(?P<quote>["\'`])' + re.escape(source) + r"(?P=quote)")
+
+    def replace_match(match: re.Match[str]) -> str:
+        quote = match.group("quote")
+        return f"{quote}{target}{quote}"
+
+    return pattern.subn(replace_match, text)
+
+
 def patch_hardcoded_frontend_strings(app: Path, lang_code: str) -> None:
     assets_dir = app / FRONTEND_ASSETS_REL
-    replacement_items = load_frontend_hardcoded_replacements(lang_code)
+    replacement_items = sorted(
+        load_frontend_hardcoded_replacements(lang_code),
+        key=lambda item: len(item[0]),
+        reverse=True,
+    )
     patched_files = 0
     patched_strings = 0
 
@@ -204,9 +236,8 @@ def patch_hardcoded_frontend_strings(app: Path, lang_code: str) -> None:
         patched = text
         count = 0
         for source, target in replacement_items:
-            occurrences = patched.count(source)
+            patched, occurrences = replace_frontend_hardcoded_text(patched, source, target)
             if occurrences:
-                patched = patched.replace(source, target)
                 count += occurrences
         if patched != text:
             path.write_text(patched, encoding="utf-8")
@@ -259,6 +290,18 @@ def encode_asar_header(header_string: str, expected_header_size: int) -> bytes:
     return struct.pack("<I", 4) + struct.pack("<I", expected_header_size) + header_pickle
 
 
+def encode_asar_header_dynamic(header_string: str) -> bytes:
+    header_bytes = header_string.encode("utf-8")
+    header_payload_size = align4(4 + len(header_bytes))
+    header_pickle = (
+        struct.pack("<I", header_payload_size)
+        + struct.pack("<i", len(header_bytes))
+        + header_bytes
+        + b"\0" * (header_payload_size - 4 - len(header_bytes))
+    )
+    return struct.pack("<I", 4) + struct.pack("<I", len(header_pickle)) + header_pickle
+
+
 def get_asar_file_entry(header: dict[str, Any], file_path: str) -> dict[str, Any]:
     node: dict[str, Any] = header
     for part in file_path.split("/"):
@@ -275,6 +318,29 @@ def get_asar_file_entry(header: dict[str, Any], file_path: str) -> dict[str, Any
     return node
 
 
+def iter_asar_file_entries(header: dict[str, Any]) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+
+    def walk(node: dict[str, Any]) -> None:
+        files = node.get("files")
+        if not isinstance(files, dict):
+            return
+        for child in files.values():
+            if not isinstance(child, dict):
+                continue
+            if "files" in child:
+                walk(child)
+            elif "offset" in child and "size" in child:
+                entries.append(child)
+
+    walk(header)
+    return entries
+
+
+def set_asar_offset(entry: dict[str, Any], offset: int) -> None:
+    entry["offset"] = str(offset) if isinstance(entry.get("offset"), str) else offset
+
+
 def calculate_file_integrity(data: bytes) -> dict[str, Any]:
     blocks = [
         hashlib.sha256(data[offset : offset + ASAR_INTEGRITY_BLOCK_SIZE]).hexdigest()
@@ -288,6 +354,228 @@ def calculate_file_integrity(data: bytes) -> dict[str, Any]:
         "blockSize": ASAR_INTEGRITY_BLOCK_SIZE,
         "blocks": blocks,
     }
+
+
+def replace_asar_file_content(app: Path, file_path: str, patched_content: bytes) -> bool:
+    path = app / APP_ASAR_REL
+    require_file(path)
+
+    data = bytearray(path.read_bytes())
+    header_size, _header_string, header = read_asar_header(data, path)
+    entry = get_asar_file_entry(header, file_path)
+    content_offset = 8 + header_size + int(entry["offset"])
+    content_size = int(entry["size"])
+    content_end = content_offset + content_size
+    if content_offset < 0 or content_end > len(data):
+        raise SystemExit(f"Unsupported app.asar file bounds for {file_path}.")
+
+    old_content = bytes(data[content_offset:content_end])
+    if old_content == patched_content:
+        return False
+
+    target_offset = int(entry["offset"])
+    delta = len(patched_content) - content_size
+    data[content_offset:content_end] = patched_content
+
+    entry["size"] = len(patched_content)
+    entry["integrity"] = calculate_file_integrity(patched_content)
+    if delta:
+        for other in iter_asar_file_entries(header):
+            if other is not entry and int(other["offset"]) > target_offset:
+                set_asar_offset(other, int(other["offset"]) + delta)
+
+    updated_header_string = json.dumps(header, ensure_ascii=False, separators=(",", ":"))
+    updated_header = encode_asar_header_dynamic(updated_header_string)
+    body = bytes(data[8 + header_size :])
+
+    path.write_bytes(updated_header + body)
+    update_electron_asar_integrity(app, updated_header_string)
+    return True
+
+
+def build_online_locale_injection(lang_code: str) -> str:
+    return (
+        f';(()=>{{const l="{lang_code}",s=()=>{{try{{localStorage.setItem("spa:locale",l);'
+        'document.documentElement&&document.documentElement.setAttribute("lang",l)}}catch{{}}}};'
+        f's();addEventListener("DOMContentLoaded",s)}})();/*{ONLINE_LOCALE_MARKER}*/'
+    )
+
+
+def strip_online_locale_injection(text: str) -> tuple[str, bool]:
+    pattern = re.compile(
+        rf';\(\(\)=>\{{const l="[^"]+".*?/\*{ONLINE_LOCALE_MARKER}\*/',
+        re.DOTALL,
+    )
+    patched, count = pattern.subn("", text)
+    return patched, count > 0
+
+
+def remove_online_locale_preload(content: bytes) -> tuple[bytes, bool]:
+    text = content.decode("utf-8")
+    text, had_existing = strip_online_locale_injection(text)
+    return text.encode("utf-8"), had_existing
+
+
+def patch_online_locale_preload(app: Path, lang_code: str) -> None:
+    path = app / APP_ASAR_REL
+    require_file(path)
+    data = path.read_bytes()
+    header_size, _header_string, header = read_asar_header(data, path)
+
+    removed_count = 0
+    for file_path in ONLINE_LOCALE_PRELOAD_TARGETS:
+        entry = get_asar_file_entry(header, file_path)
+        content_offset = 8 + header_size + int(entry["offset"])
+        content_size = int(entry["size"])
+        content_end = content_offset + content_size
+        if content_offset < 0 or content_end > len(data):
+            raise SystemExit(f"Unsupported app.asar file bounds for {file_path}.")
+
+        content = data[content_offset:content_end]
+        patched_content, changed = remove_online_locale_preload(content)
+        if changed:
+            if replace_asar_file_content(app, file_path, patched_content):
+                removed_count += 1
+            data = path.read_bytes()
+            header_size, _header_string, header = read_asar_header(data, path)
+
+    if removed_count:
+        print(f"Removed stale online claude.ai locale preload: {removed_count} files")
+    else:
+        print("Online claude.ai locale preload not present")
+
+
+def is_online_dom_translation_entry(source: str, target: str) -> bool:
+    if not source or not target or source == target:
+        return False
+    if len(source) > ONLINE_TRANSLATION_MAX_SOURCE_LEN:
+        return False
+    blocked_fragments = ["<", "{", "\n", "http://", "https://"]
+    return not any(fragment in source or fragment in target for fragment in blocked_fragments)
+
+
+def build_online_translation_map(app: Path, lang_code: str) -> dict[str, str]:
+    config = get_language_config(lang_code)
+    en_path = app / FRONTEND_I18N_REL / "en-US.json"
+    require_file(en_path)
+    require_file(config["frontend_translation"])
+
+    en = load_json(en_path)
+    zh = load_json(config["frontend_translation"])
+    if not isinstance(en, dict) or not isinstance(zh, dict):
+        raise SystemExit("Unsupported frontend i18n JSON shape for online DOM translation.")
+
+    mapping: dict[str, str] = {}
+    for key, source in en.items():
+        target = zh.get(key)
+        if isinstance(source, str) and isinstance(target, str) and is_online_dom_translation_entry(source, target):
+            mapping[source] = target
+
+    for source, target in load_frontend_hardcoded_replacements(lang_code):
+        if is_online_dom_translation_entry(source, target):
+            mapping[source] = target
+
+    return dict(sorted(mapping.items()))
+
+
+def build_online_dom_translation_script(lang_code: str, mapping: dict[str, str]) -> str:
+    mapping_json = json.dumps(mapping, ensure_ascii=False, separators=(",", ":"))
+    return (
+        "(()=>{try{"
+        f'const L="{lang_code}",M={mapping_json};'
+        'localStorage.setItem("spa:locale",L);'
+        'document.documentElement&&document.documentElement.setAttribute("lang",L);'
+        'const N=s=>(s||"").replace(/\\s+/g," ").trim();'
+        'const G=[[/^Morning, (.+)$/,"早上好，$1"],[/^Good morning, (.+)$/,"早上好，$1"],'
+        '[/^Afternoon, (.+)$/,"下午好，$1"],[/^Good afternoon, (.+)$/,"下午好，$1"],'
+        '[/^Evening, (.+)$/,"晚上好，$1"],[/^Good evening, (.+)$/,"晚上好，$1"],'
+        '[/^It\\\'s late-night (.+)$/,"夜深了，$1"],[/^Good night, (.+)$/,"晚安，$1"],'
+        '[/^Delete (\\d+) chat$/,"删除 $1 个聊天"],[/^Delete (\\d+) chats$/,"删除 $1 个聊天"],'
+        '[/^Connection needs (\\d+) field$/,"连接还需要填写 $1 个字段"],[/^Connection needs (\\d+) fields$/,"连接还需要填写 $1 个字段"],'
+        '[/^needs (\\d+) field$/,"还需要填写 $1 个字段"],[/^needs (\\d+) fields$/,"还需要填写 $1 个字段"],'
+        '[/^Are you sure you want to delete (\\d+) chat\\? This cannot be undone\\.$/,"你确定要删除 $1 个聊天吗？此操作无法撤消。"],'
+        '[/^Are you sure you want to delete (\\d+) chats\\? This cannot be undone\\.$/,"你确定要删除 $1 个聊天吗？此操作无法撤消。"],'
+        '[/^Are you sure you want to permanently delete this chat\\? This cannot be undone\\.$/,"你确定要永久删除此聊天吗？此操作无法撤消。"],'
+        '[/^Are you sure you want to permanently delete these chats\\? This cannot be undone\\.$/,"你确定要永久删除这些聊天吗？此操作无法撤消。"]];'
+        'const R=s=>{const n=N(s);if(M[n])return M[n];for(const [r,t] of G){const m=n.match(r);'
+        'if(m)return t.replace("$1",m[1])}};'
+        'const X=new Set(["SCRIPT","STYLE","NOSCRIPT"]);'
+        "function T(){"
+        "try{"
+        "const b=document.body||document.documentElement;if(!b)return;"
+        "const w=document.createTreeWalker(b,NodeFilter.SHOW_TEXT,{acceptNode(n){"
+        "const p=n.parentElement;if(!p||X.has(p.tagName)||!R(n.nodeValue))return NodeFilter.FILTER_REJECT;"
+        "return NodeFilter.FILTER_ACCEPT}});"
+        "let n;while(n=w.nextNode()){const v=R(n.nodeValue);if(v)n.nodeValue=v}"
+        'document.querySelectorAll("[aria-label],[title],[placeholder],input,textarea").forEach(e=>{'
+        '["aria-label","title","placeholder","value"].forEach(a=>{'
+        'try{if(a==="value"&&!(e.matches("input[type=button],input[type=submit]")))return;'
+        "const v=e.getAttribute?e.getAttribute(a):e[a];const t=R(v);"
+        "if(t){if(e.setAttribute)e.setAttribute(a,t);else e[a]=t}}catch{}})});"
+        'document.querySelectorAll("a").forEach(e=>{try{'
+        'const r=e.getBoundingClientRect(),txt=N(e.textContent);'
+        'if(txt==="Claude"&&r.left<100&&r.top<100)e.style.visibility="hidden"}catch{}});'
+        "}catch{}}"
+        "T();"
+        "new MutationObserver(()=>{clearTimeout(window.__claudeZhDomTimer);window.__claudeZhDomTimer=setTimeout(T,30)})"
+        ".observe(document.documentElement,{subtree:true,childList:true,characterData:true,attributes:true});"
+        "}catch(e){}})()"
+    )
+
+
+def build_online_locale_main_process_script(lang_code: str, mapping: dict[str, str]) -> str:
+    script = (
+        f'(()=>{{try{{const l="{lang_code}";'
+        'if(localStorage.getItem("spa:locale")!==l){localStorage.setItem("spa:locale",l)}}catch(e){}})();'
+        + build_online_dom_translation_script(lang_code, mapping)
+    )
+    return (
+        's.webContents.on("dom-ready",()=>{DIA();'
+        f"s.webContents.executeJavaScript({json.dumps(script)}).catch(()=>{{}})"
+        f"}});/*{ONLINE_LOCALE_MAIN_MARKER}*/"
+    )
+
+
+def strip_online_locale_main_process_patch(text: str) -> tuple[str, bool]:
+    pattern = re.compile(
+        r's\.webContents\.on\("dom-ready",\(\)=>\{DIA\(\);'
+        r's\.webContents\.executeJavaScript\("(?:\\.|[^"])*"\)\.catch\(\(\)=>\{\}\)'
+        rf'\}}\);/\*{ONLINE_LOCALE_MAIN_MARKER}\*/'
+    )
+    patched, count = pattern.subn('s.webContents.on("dom-ready",()=>{DIA()});', text)
+    return patched, count > 0
+
+
+def patch_online_locale_main_process(app: Path, lang_code: str) -> None:
+    path = app / APP_ASAR_REL
+    require_file(path)
+
+    data = path.read_bytes()
+    header_size, _header_string, header = read_asar_header(data, path)
+    entry = get_asar_file_entry(header, ASAR_PATCH_TARGET)
+    content_offset = 8 + header_size + int(entry["offset"])
+    content_size = int(entry["size"])
+    content_end = content_offset + content_size
+    if content_offset < 0 or content_end > len(data):
+        raise SystemExit(f"Unsupported app.asar file bounds for {ASAR_PATCH_TARGET}.")
+
+    text = data[content_offset:content_end].decode("utf-8")
+    text, had_existing = strip_online_locale_main_process_patch(text)
+    anchor = 's.webContents.on("dom-ready",()=>{DIA()});'
+    mapping = build_online_translation_map(app, lang_code)
+    injection = build_online_locale_main_process_script(lang_code, mapping)
+    if injection in text:
+        print("Online claude.ai locale main-process patch already applied")
+        return
+    if anchor not in text:
+        if had_existing:
+            raise SystemExit("Could not refresh online locale main-process patch.")
+        raise SystemExit("Could not find main view dom-ready anchor for online locale patch.")
+
+    patched = text.replace(anchor, injection, 1).encode("utf-8")
+    replace_asar_file_content(app, ASAR_PATCH_TARGET, patched)
+    action = "Refreshed" if had_existing else "Patched"
+    print(f"{action} online claude.ai locale main-process hook: {len(mapping)} DOM strings")
 
 
 def _custom3p_validation_removed(content: bytes) -> bool:
@@ -454,18 +742,78 @@ def pad_utf8_replacement(source: str, target: str) -> str:
 def get_main_process_menu_replacements(lang_code: str) -> dict[str, str]:
     replacements_by_lang = {
         "zh-CN": {
+            "File": "文件",
+            "Edit": "编辑",
+            "View": "查看",
+            "Developer": "开发者",
+            "Help": "帮助",
+            "Extensions": "扩展",
+            "Open Developer Config File…": "打开开发者配置文件…",
+            "Open Developer Config File...": "打开开发者配置文件...",
+            "Configure Third-Party Inference…": "配置第三方推理…",
+            "Configure Third-Party Inference...": "配置第三方推理...",
+            "Open App Config File…": "打开应用配置文件…",
+            "Open App Config File...": "打开应用配置文件...",
+            "Reload MCP Configuration": "重新加载 MCP 配置",
+            "Open MCP Log File": "打开 MCP 日志文件",
+            "Open MCP Log File…": "打开 MCP 日志文件…",
+            "Open MCP Log File...": "打开 MCP 日志文件...",
+            "Open Hardware Buddy…": "打开硬件伙伴…",
+            "Open Hardware Buddy...": "打开硬件伙伴...",
+            "Show All Dev Tools": "显示所有开发者工具",
+            "Show Dev Tools": "显示开发者工具",
             "Enable Main Process Debugger": "启用主进程调试器",
             "Record Performance Trace": "记录性能跟踪",
             "Write Main Process Heap Snapshot": "写入主进程堆快照",
             "Record Memory Trace (auto-stop)": "记录内存跟踪 (自动)",
         },
         "zh-TW": {
+            "File": "檔案",
+            "Edit": "編輯",
+            "View": "檢視",
+            "Developer": "開發者",
+            "Help": "說明",
+            "Extensions": "擴充功能",
+            "Open Developer Config File…": "開啟開發者設定檔…",
+            "Open Developer Config File...": "開啟開發者設定檔...",
+            "Configure Third-Party Inference…": "設定第三方推理…",
+            "Configure Third-Party Inference...": "設定第三方推理...",
+            "Open App Config File…": "開啟應用程式設定檔…",
+            "Open App Config File...": "開啟應用程式設定檔...",
+            "Reload MCP Configuration": "重新載入 MCP 設定",
+            "Open MCP Log File": "開啟 MCP 記錄檔",
+            "Open MCP Log File…": "開啟 MCP 記錄檔…",
+            "Open MCP Log File...": "開啟 MCP 記錄檔...",
+            "Open Hardware Buddy…": "開啟硬體夥伴…",
+            "Open Hardware Buddy...": "開啟硬體夥伴...",
+            "Show All Dev Tools": "顯示所有開發者工具",
+            "Show Dev Tools": "顯示開發者工具",
             "Enable Main Process Debugger": "啟用主行程偵錯器",
             "Record Performance Trace": "記錄效能追蹤",
             "Write Main Process Heap Snapshot": "寫入主行程堆積快照",
             "Record Memory Trace (auto-stop)": "記錄記憶體追蹤 (自動)",
         },
         "zh-HK": {
+            "File": "檔案",
+            "Edit": "編輯",
+            "View": "檢視",
+            "Developer": "開發者",
+            "Help": "說明",
+            "Extensions": "擴充功能",
+            "Open Developer Config File…": "開啟開發者設定檔…",
+            "Open Developer Config File...": "開啟開發者設定檔...",
+            "Configure Third-Party Inference…": "設定第三方推理…",
+            "Configure Third-Party Inference...": "設定第三方推理...",
+            "Open App Config File…": "開啟應用程式設定檔…",
+            "Open App Config File...": "開啟應用程式設定檔...",
+            "Reload MCP Configuration": "重新載入 MCP 設定",
+            "Open MCP Log File": "開啟 MCP 記錄檔",
+            "Open MCP Log File…": "開啟 MCP 記錄檔…",
+            "Open MCP Log File...": "開啟 MCP 記錄檔...",
+            "Open Hardware Buddy…": "開啟硬件夥伴…",
+            "Open Hardware Buddy...": "開啟硬件夥伴...",
+            "Show All Dev Tools": "顯示所有開發者工具",
+            "Show Dev Tools": "顯示開發者工具",
             "Enable Main Process Debugger": "啟用主行程偵錯器",
             "Record Performance Trace": "記錄效能追蹤",
             "Write Main Process Heap Snapshot": "寫入主行程堆積快照",
@@ -473,6 +821,92 @@ def get_main_process_menu_replacements(lang_code: str) -> dict[str, str]:
         },
     }
     return replacements_by_lang[lang_code]
+
+
+def get_main_process_menu_intl_replacements(lang_code: str) -> dict[str, str]:
+    replacements_by_lang = {
+        "zh-CN": {
+            "0tZLEYF8mJ": "开发者",
+            "/PgA81GVOD": "编辑",
+            "LCWUQ/4Fu6": "查看",
+            "uc3dnSo+eo": "文件",
+            "EfdnINFnIz": "文件",
+            "pWXxZASpOB": "帮助",
+            "JOf7G+dCf1": "打开应用配置文件...",
+            "K5GtyaPaw/": "打开开发者配置文件...",
+            "RTg057HE1D": "显示开发者工具",
+            "STqYpFr7p4": "显示所有开发者工具",
+            "rNAd+HxSK4": "打开 MCP 日志文件",
+            "PW5U8NgTto": "打开 MCP 日志文件...",
+            "uKCcuVd1Yt": "重新加载 MCP 配置",
+            "9GRz7bC+rr": "配置第三方推理…",
+        },
+        "zh-TW": {
+            "0tZLEYF8mJ": "開發者",
+            "/PgA81GVOD": "編輯",
+            "LCWUQ/4Fu6": "檢視",
+            "uc3dnSo+eo": "檔案",
+            "EfdnINFnIz": "檔案",
+            "pWXxZASpOB": "說明",
+            "JOf7G+dCf1": "開啟應用程式設定檔...",
+            "K5GtyaPaw/": "開啟開發者設定檔...",
+            "RTg057HE1D": "顯示開發者工具",
+            "STqYpFr7p4": "顯示所有開發者工具",
+            "rNAd+HxSK4": "開啟 MCP 記錄檔",
+            "PW5U8NgTto": "開啟 MCP 記錄檔...",
+            "uKCcuVd1Yt": "重新載入 MCP 設定",
+            "9GRz7bC+rr": "設定第三方推理…",
+        },
+        "zh-HK": {
+            "0tZLEYF8mJ": "開發者",
+            "/PgA81GVOD": "編輯",
+            "LCWUQ/4Fu6": "檢視",
+            "uc3dnSo+eo": "檔案",
+            "EfdnINFnIz": "檔案",
+            "pWXxZASpOB": "說明",
+            "JOf7G+dCf1": "開啟應用程式設定檔...",
+            "K5GtyaPaw/": "開啟開發者設定檔...",
+            "RTg057HE1D": "顯示開發者工具",
+            "STqYpFr7p4": "顯示所有開發者工具",
+            "rNAd+HxSK4": "開啟 MCP 記錄檔",
+            "PW5U8NgTto": "開啟 MCP 記錄檔...",
+            "uKCcuVd1Yt": "重新載入 MCP 設定",
+            "9GRz7bC+rr": "設定第三方推理…",
+        },
+    }
+    return replacements_by_lang[lang_code]
+
+
+def replace_menu_intl_message_by_id(text: str, message_id: str, target: str) -> tuple[str, int]:
+    updated = text
+    count = 0
+    needle = f'id:"{message_id}"'
+    pattern = re.compile(
+        r'[A-Za-z_$][A-Za-z0-9_$]*\(\)\.formatMessage\(\{defaultMessage:"(?:\\.|[^"\\])*",id:"'
+        + re.escape(message_id)
+        + r'"(?:,description:"(?:\\.|[^"\\])*")?\}\)'
+    )
+    search_start = 0
+    while True:
+        id_index = updated.find(needle, search_start)
+        if id_index < 0:
+            break
+
+        window_start = max(0, id_index - 600)
+        window_end = min(len(updated), id_index + 600)
+        match = pattern.search(updated[window_start:window_end])
+        if not match:
+            search_start = id_index + len(needle)
+            continue
+
+        absolute_start = window_start + match.start()
+        absolute_end = window_start + match.end()
+        literal = json.dumps(target, ensure_ascii=False)
+        updated = updated[:absolute_start] + literal + updated[absolute_end:]
+        count += 1
+        search_start = absolute_start + len(literal)
+
+    return updated, count
 
 
 def patch_hardcoded_main_process_menu_labels(app: Path, lang_code: str) -> None:
@@ -493,29 +927,62 @@ def patch_hardcoded_main_process_menu_labels(app: Path, lang_code: str) -> None:
     text = content.decode("utf-8")
     patched = text
     count = 0
-    for source, target in replacements.items():
-        if source not in patched or target in patched:
-            continue
-        patched = patched.replace(source, pad_utf8_replacement(source, target))
-        count += 1
+    intl_count = 0
+    repair_count = 0
+    unsafe_repairs = {
+        "文件": "File",
+        "檔案": "File",
+        "编辑": "Edit",
+        "編輯": "Edit",
+        "查看": "View",
+        "檢視": "View",
+        "帮助": "Help",
+        "說明": "Help",
+        "开发者": "Developer",
+        "開發者": "Developer",
+        "扩展": "Extensions",
+        "擴充功能": "Extensions",
+    }
+    for source, target in unsafe_repairs.items():
+        pattern = re.compile(r'(?P<quote>["\'`])' + re.escape(source) + r"(?P=quote)")
 
-    if count == 0:
+        def repair_match(match: re.Match[str]) -> str:
+            quote = match.group("quote")
+            return f"{quote}{target}{quote}"
+
+        patched, occurrences = pattern.subn(repair_match, patched)
+        repair_count += occurrences
+
+    for message_id, target in get_main_process_menu_intl_replacements(lang_code).items():
+        patched, occurrences = replace_menu_intl_message_by_id(patched, message_id, target)
+        intl_count += occurrences
+
+    for source, target in sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True):
+        if source not in patched:
+            continue
+        pattern = re.compile(
+            r"(?P<prefix>(?<![A-Za-z0-9_$])(?:label|defaultMessage)\s*:\s*)"
+            r'(?P<quote>["\'`])'
+            + re.escape(source)
+            + r"(?P=quote)"
+        )
+
+        def replace_match(match: re.Match[str]) -> str:
+            quote = match.group("quote")
+            return f"{match.group('prefix')}{quote}{target}{quote}"
+
+        patched, occurrences = pattern.subn(replace_match, patched)
+        count += occurrences
+
+    if count == 0 and intl_count == 0 and repair_count == 0:
         print("Hardcoded main-process menu labels already patched")
         return
 
     patched_content = patched.encode("utf-8")
-    if len(patched_content) != len(content):
-        raise SystemExit("Internal patch error: menu label replacement changed bundle size.")
-
-    data[content_offset:content_end] = patched_content
-    entry["integrity"] = calculate_file_integrity(patched_content)
-    updated_header_string = json.dumps(header, ensure_ascii=False, separators=(",", ":"))
-    updated_header = encode_asar_header(updated_header_string, header_size)
-    data[: len(updated_header)] = updated_header
-
-    path.write_bytes(data)
-    update_electron_asar_integrity(app, updated_header_string)
-    print(f"Patched hardcoded main-process menu labels: {count} replacements")
+    replace_asar_file_content(app, ASAR_PATCH_TARGET, patched_content)
+    if repair_count:
+        print(f"Repaired unsafe short main-process menu replacements: {repair_count} occurrences")
+    print(f"Patched hardcoded main-process menu labels: {count + intl_count} replacements")
 
 
 def merge_frontend_locale(app: Path, lang_code: str) -> tuple[int, int, int]:
@@ -842,6 +1309,11 @@ def main() -> int:
     patch_language_whitelist(patched_app, lang_code)
     patch_hardcoded_frontend_strings(patched_app, lang_code)
     patch_language_display_names(patched_app)
+    if args.skip_asar_patch:
+        print("Skipping online claude.ai locale preload patch (--skip-asar-patch)")
+    else:
+        patch_online_locale_preload(patched_app, lang_code)
+        patch_online_locale_main_process(patched_app, lang_code)
     if args.skip_asar_patch:
         print("Skipping main-process menu label patch (--skip-asar-patch)")
     else:
