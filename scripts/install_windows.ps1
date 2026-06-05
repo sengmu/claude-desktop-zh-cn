@@ -1164,9 +1164,9 @@ function Register-Language {
     )
 
     $assetsDir = Join-Path $ResourcesPath "ion-dist\assets\v1"
-    $jsFiles = @(Get-ChildItem (Join-Path $assetsDir "index-*.js") -ErrorAction SilentlyContinue)
+    $jsFiles = @(Get-ChildItem (Join-Path $assetsDir "*.js") -ErrorAction SilentlyContinue)
     if ($jsFiles.Count -eq 0) {
-        throw "未找到前端 index-*.js: $assetsDir"
+        throw "未找到前端 JS bundle: $assetsDir"
     }
 
     $regex = [System.Text.RegularExpressions.Regex]::new($LanguageListPattern)
@@ -1199,9 +1199,9 @@ function Patch-LanguageDisplayNames {
     param([string]$ResourcesPath)
 
     $assetsDir = Join-Path $ResourcesPath "ion-dist\assets\v1"
-    $jsFiles = @(Get-ChildItem (Join-Path $assetsDir "index-*.js") -ErrorAction SilentlyContinue)
+    $jsFiles = @(Get-ChildItem (Join-Path $assetsDir "*.js") -ErrorAction SilentlyContinue)
     if ($jsFiles.Count -eq 0) {
-        throw "未找到前端 index-*.js: $assetsDir"
+        throw "未找到前端 JS bundle: $assetsDir"
     }
 
     $marker = "__claudeZhLabelPatch"
@@ -1229,7 +1229,7 @@ function Unregister-Language {
     param([string]$ResourcesPath)
 
     $assetsDir = Join-Path $ResourcesPath "ion-dist\assets\v1"
-    $jsFiles = @(Get-ChildItem (Join-Path $assetsDir "index-*.js") -ErrorAction SilentlyContinue)
+    $jsFiles = @(Get-ChildItem (Join-Path $assetsDir "*.js") -ErrorAction SilentlyContinue)
     foreach ($file in $jsFiles) {
         $text = [System.IO.File]::ReadAllText($file.FullName, [System.Text.Encoding]::UTF8)
         $updated = $text
