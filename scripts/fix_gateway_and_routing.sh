@@ -25,7 +25,7 @@ if acc_path.exists():
         email = acc.get("email")
         if email == "linguihong321@gmail.com":
             acc["disabled"] = True  # 禁用被谷歌 403 验证锁定的账号
-            print("  [x] 已禁用谷歌验证拦截 of linguihong321@gmail.com")
+            print("  [x] 已禁用谷歌验证拦截的账号: linguihong321@gmail.com")
         else:
             acc["disabled"] = False  # 正常健康账号全部启用
             acc["protected_models"] = [
@@ -50,6 +50,11 @@ if cfg_path.exists():
     mapping = cfg_data.setdefault("proxy", {}).setdefault("custom_mapping", {})
     
     # 注入重定向别名映射：强行将各种 Claude 请求无缝转换成健康的 Gemini 专线
+    mapping["claude-haiku-4"] = "gemini-3-flash"
+    mapping["claude-sonnet-4-5"] = "gemini-3-pro-high"
+    mapping["claude-opus-4-6"] = "gemini-3-pro-high"
+    mapping["claude-4"] = "gemini-3-pro-high"
+    mapping["claude-3-5-haiku"] = "gemini-3-flash"
     mapping["claude-3-5-haiku-20241022"] = "gemini-3-flash"
     mapping["claude-3-haiku-20240307"] = "gemini-3-flash"
     mapping["claude-3-5-sonnet-latest"] = "gemini-3-pro-high"
