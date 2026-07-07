@@ -49,7 +49,10 @@ if cfg_path.exists():
         
     mapping = cfg_data.setdefault("proxy", {}).setdefault("custom_mapping", {})
     
-    # 注入重定向别名映射：强行将各种 Claude 请求无缝转换成健康的 Gemini 专线
+    # 注入重定向别名映射：强行将各种 Claude 请求与 GPT 测试探针无缝转换成健康的 Gemini 专线
+    mapping["gpt-4o-mini"] = "gemini-3-flash"
+    mapping["gpt-4o"] = "gemini-3-pro-high"
+    mapping["gpt-4-turbo"] = "gemini-3-pro-high"
     mapping["claude-haiku-4"] = "gemini-3-flash"
     mapping["claude-sonnet-4-5"] = "gemini-3-pro-high"
     mapping["claude-opus-4-6"] = "gemini-3-pro-high"
