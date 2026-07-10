@@ -296,6 +296,152 @@ def patch_hardcoded_frontend_strings(app: Path, lang_code: str) -> None:
     )
 
 
+def patch_scroll_anchoring(app: Path) -> None:
+    pass
+
+def patch_scroll_javascript(app: Path) -> None:
+    start = time.perf_counter()
+    assets_dir = app / FRONTEND_ASSETS_REL
+    js_files = list(assets_dir.glob("index-*.js"))
+    if not js_files:
+        log("No index-*.js file found to patch scroll JavaScript.")
+        return
+    
+    js_file = js_files[0]
+    log(f"Patching scroll JavaScript in {js_file.name}...")
+    content = js_file.read_text(encoding="utf-8")
+    
+    inject_js = """
+;(function() {
+  function initScrollFix() {
+    let scrollContainers = new Set();
+    const stateMap = new WeakMap();
+
+    function updateState(container) {
+      if (!stateMap.has(container)) {
+        stateMap.set(container, {
+          wasAtBottom: true,
+          lastScrollHeight: container.scrollHeight,
+          lastClientHeight: container.clientHeight,
+          lastScrollTop: container.scrollTop
+        });
+      }
+      const state = stateMap.get(container);
+      const isAtBottom = Math.ceil(container.scrollTop + container.clientHeight) >= container.scrollHeight - 60;
+      
+      state.wasAtBottom = isAtBottom;
+      state.lastScrollHeight = container.scrollHeight;
+      state.lastClientHeight = container.clientHeight;
+      state.lastScrollTop = container.scrollTop;
+    }
+
+    function checkAndScroll() {
+      document.querySelectorAll('.overflow-y-auto, .overflow-y-scroll').forEach(container => {
+        if (!scrollContainers.has(container)) {
+          scrollContainers.add(container);
+          container.addEventListener('scroll', () => updateState(container), { passive: true });
+          updateState(container);
+        }
+
+        const state = stateMap.get(container);
+        if (!state) return;
+
+        const heightChanged = container.scrollHeight !== state.lastScrollHeight;
+        
+        if (heightChanged) {
+          if (state.wasAtBottom) {
+            container.scrollTop = container.scrollHeight;
+          }
+          updateState(container);
+        }
+      });
+    }
+
+    setInterval(checkAndScroll, 50);
+
+    const ro = new ResizeObserver(() => checkAndScroll());
+    ro.observe(document.body);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initScrollFix);
+  } else {
+    initScrollFix();
+  }
+})();
+"""
+    if "function initScrollFix()" not in content:
+        js_file.write_text(content + inject_js, encoding="utf-8")
+    log(f"Patched scroll JavaScript in {elapsed_since(start)}")
+
+
+def suppress_provider_health_toasts(app: Path) -> None:
+    """Blank gateway/provider health-check error strings so false 503 probes don't spam UI.
+
+    Claude Desktop probes the local gateway with a test /v1/messages request. When the
+    upstream (e.g. Antigravity -> Google) briefly fails, the app shows a blocking toast
+    even if chat still works. Blanking these i18n keys (outside app.asar) is safe and
+    does not affect ASAR integrity.
+    """
+    keys = {
+        "znCeYD3m6L",  # Your connection works, but the provider rejected a test request...
+        "omq6PdW3ff",  # longer variant of the same
+        "AFXhwydbvF",  # {provider} returned an error
+        "4zOvK89/in",  # The provider didn't respond. Check your network or VPN...
+        "sPuACPwqmi",  # 提供商没有响应...
+        "c9fsVL9wrY",  # 你的提供商设置需要修复
+        "ha5HbvlDOk",  # 你的网关无法提供 {model}
+        "BRcD7K7M3Y",  # The provider rejected your credentials...
+        "sCm5gNAcvf",  # The provider rejected the credentials IT configured...
+        "Qe5TZgb1+q",  # Sorry, it's taking a while to connect...
+        "M1xaCQwNr4",  # Taking longer than expected to reach your inference provider...
+        "jDH/vSi1ah",  # Can't reach your inference provider...
+    }
+    phrases = (
+        "provider rejected a test request",
+        "Your connection works, but the provider rejected",
+        "{provider} returned an error",
+    )
+
+    i18n_dir = app / FRONTEND_I18N_REL
+    if not i18n_dir.is_dir():
+        log(f"No frontend i18n dir at {i18n_dir}; skip health-toast suppress.")
+        return
+
+    changed_files = 0
+    blanked = 0
+    for path in sorted(i18n_dir.glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(data, dict):
+            continue
+        file_hits = 0
+        for key in keys:
+            value = data.get(key)
+            if isinstance(value, str) and value != "":
+                data[key] = ""
+                file_hits += 1
+        for key, value in list(data.items()):
+            if not isinstance(value, str) or value == "":
+                continue
+            low = value.lower()
+            if any(p.lower() in low for p in phrases):
+                data[key] = ""
+                file_hits += 1
+        if file_hits:
+            path.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            changed_files += 1
+            blanked += file_hits
+    log(
+        f"Suppressed provider health toasts: blanked {blanked} strings in {changed_files} locale files"
+    )
+
+
 def align4(value: int) -> int:
     return value + ((4 - (value % 4)) % 4)
 
@@ -861,6 +1007,40 @@ def patch_custom3p_model_validation(app: Path) -> None:
     path.write_bytes(data)
     update_electron_asar_integrity(app, updated_header_string)
     print("Patched custom 3P model-name validation in app.asar")
+
+
+def patch_sandbox_network(app: Path) -> None:
+    # 修复本地沙箱网络策略，替换允许的域名列表为允许所有
+    path = app / APP_ASAR_REL
+    require_file(path)
+
+    data = bytearray(path.read_bytes())
+    header_size, _header_string, header = read_asar_header(data, path)
+    entry = get_asar_file_entry(header, ASAR_PATCH_TARGET)
+    content_offset = 8 + header_size + int(entry["offset"])
+    content_size = int(entry["size"])
+    content_end = content_offset + content_size
+    if content_offset < 0 or content_end > len(data):
+        raise SystemExit(f"Unsupported app.asar file bounds for {ASAR_PATCH_TARGET}.")
+
+    content = bytes(data[content_offset:content_end])
+    text = content.decode("utf-8")
+
+    # 匹配混淆后的 resolveVmAllowedDomains(e,t) 并直接返回允许所有域名
+    pattern = re.compile(r"async resolveVmAllowedDomains\(([A-Za-z0-9_$,\s]+)\)\{")
+    if not pattern.search(text):
+        print("Warning: resolveVmAllowedDomains not found, trying allowedDomains replacement")
+        text_patched = text.replace("allowedDomains:Ec", 'allowedDomains:["*"]')
+    else:
+        text_patched = pattern.sub(r"async resolveVmAllowedDomains(\1){return ['*'];", text)
+
+    if text_patched == text:
+        print("Sandbox network policy already patched or not found")
+        return
+
+    patched_content = text_patched.encode("utf-8")
+    replace_asar_file_content(app, ASAR_PATCH_TARGET, patched_content)
+    print("Successfully patched sandbox network policy to allow all domains (*)")
 
 
 def pad_utf8_replacement(source: str, target: str) -> str:
@@ -1879,9 +2059,12 @@ def main() -> int:
         print("Skipping 3P model validation patch (--skip-asar-patch)")
     else:
         patch_custom3p_model_validation(patched_app)
+        patch_sandbox_network(patched_app)
     merge_frontend_locale(patched_app, lang_code)
     install_desktop_locale(patched_app, lang_code)
     install_statsig_locale(patched_app, lang_code)
+    suppress_provider_health_toasts(patched_app)
+    patch_scroll_javascript(patched_app)
     resign_app(patched_app)
     clear_quarantine(patched_app)
     if args.dry_run:

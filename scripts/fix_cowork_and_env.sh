@@ -46,7 +46,9 @@ cat <<EOF > "$ENT_PATH"
 EOF
 
 echo "正在为官方版注入本地 8045 网关代理环境变量..."
-plutil -replace LSEnvironment -json '{"MallocNanoZone":"0","http_proxy":"http://127.0.0.1:7897","https_proxy":"http://127.0.0.1:7897","all_proxy":"socks5://127.0.0.1:7897","no_proxy":"127.0.0.1,localhost","NO_PROXY":"127.0.0.1,localhost","ANTHROPIC_BASE_URL":"http://127.0.0.1:8045","ANTHROPIC_API_KEY":"sk-8af1463d4a9f4297a7d656e5bfedcc9e"}' "/Applications/Claude.app/Contents/Info.plist"
+# Do NOT inject system http_proxy into Claude: it can break local 8045 health probes
+# when Clash/mixed-port is down, causing false "provider rejected" toasts.
+plutil -replace LSEnvironment -json '{"MallocNanoZone":"0","no_proxy":"127.0.0.1,localhost","NO_PROXY":"127.0.0.1,localhost","ANTHROPIC_BASE_URL":"http://127.0.0.1:8045","ANTHROPIC_API_KEY":"sk-8af1463d4a9f4297a7d656e5bfedcc9e"}' "/Applications/Claude.app/Contents/Info.plist"
 
 echo "正在为官方版进行安全沙箱与虚拟化重签名..."
 codesign --force --deep --sign - --options runtime --entitlements "$ENT_PATH" "/Applications/Claude.app"
@@ -58,7 +60,7 @@ if [ -d "$ZH_PROJECT" ]; then
   cp -R "$BACKUP_APP" "/Applications/Claude-CN.app"
   python3 "$ZH_PROJECT/scripts/patch_claude_zh_cn.py" --app "/Applications/Claude-CN.app" --lang zh-CN --user-home "/Users/$REAL_USER"
   
-  plutil -replace LSEnvironment -json '{"MallocNanoZone":"0","http_proxy":"http://127.0.0.1:7897","https_proxy":"http://127.0.0.1:7897","all_proxy":"socks5://127.0.0.1:7897","no_proxy":"127.0.0.1,localhost","NO_PROXY":"127.0.0.1,localhost","ANTHROPIC_BASE_URL":"http://127.0.0.1:8045","ANTHROPIC_API_KEY":"sk-8af1463d4a9f4297a7d656e5bfedcc9e"}' "/Applications/Claude-CN.app/Contents/Info.plist"
+  plutil -replace LSEnvironment -json '{"MallocNanoZone":"0","no_proxy":"127.0.0.1,localhost","NO_PROXY":"127.0.0.1,localhost","ANTHROPIC_BASE_URL":"http://127.0.0.1:8045","ANTHROPIC_API_KEY":"sk-8af1463d4a9f4297a7d656e5bfedcc9e"}' "/Applications/Claude-CN.app/Contents/Info.plist"
   codesign --force --deep --sign - --options runtime --entitlements "$ENT_PATH" "/Applications/Claude-CN.app"
 else
   echo "⚠️ 提示: 未能找到汉化项目路径 $ZH_PROJECT，跳过中文版重编译。"
